@@ -122,6 +122,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:50;width:100%
 .lrow .em{font-size:32px}
 .lrow .t{flex:1;min-width:0;font-weight:800}
 .lrow .t small{display:block;color:var(--muted);font-weight:700}
+a.sm{color:var(--ink);text-decoration:none;display:inline-block}
 .sm{font-weight:800;padding:8px 14px;border-radius:999px;border:2px solid var(--line);background:var(--surface);font-size:.95rem}
 .sm.primary{background:var(--ocean);color:#fff;border-color:var(--ocean)}
 .sm.danger{color:var(--bad);border-color:var(--bad)}
@@ -226,7 +227,8 @@ function viewHome(){
     h("div",null,h("h1",null,"Halo, "+name()+"!"),h("p",null,"Mau belajar apa hari ini? Pilih satu ya 👇"))));
   if(state.settings.message)kids.push(h("div",{class:"note"},h("div",{class:"ic","aria-hidden":"true"},"💌"),
     h("div",{style:"min-width:0;flex:1"},h("b",null,"Pesan dari Mama"),h("p",null,state.settings.message)),speakBtn("Pesan dari Mama. "+state.settings.message,"id")));
-  if(state.loading&&!state.lessons.length){kids.push(h("div",{class:"empty"},h("div",{class:"em"},"⏳"),h("p",null,state.slow?"Pelajaran belum bisa dimuat. Cek internet, lalu buka lagi halaman ini.":"Sebentar, pelajaran sedang disiapkan…")));}
+  if(state.loadErr&&!state.lessons.length){kids.push(h("div",{class:"empty"},h("div",{class:"em"},"⚠️"),h("p",null,"Pelajaran belum bisa dimuat dari database."),h("p",{class:"hint"},"Keterangan untuk Mama: "+state.loadErr),h("button",{class:"sm primary",onclick:()=>location.reload()},"Coba lagi")));}
+  else if(state.loading&&!state.lessons.length){kids.push(h("div",{class:"empty"},h("div",{class:"em"},"⏳"),h("p",null,state.slow?"Pelajaran belum bisa dimuat. Cek internet, lalu buka lagi halaman ini.":"Sebentar, pelajaran sedang disiapkan…")));}
   else if(!state.lessons.length){kids.push(h("div",{class:"empty"},h("div",{class:"em"},"📚"),h("p",null,"Belum ada pelajaran. Nanti Mama tambahkan, ya!")));}
   else kids.push(h("div",{class:"cards"},state.lessons.map(l=>{const b=bestFor(l.id);
     return h("button",{class:"lcard c-"+(COLORS.includes(l.color)?l.color:"ocean"),onclick:()=>startLesson(l)},
@@ -245,7 +247,8 @@ function viewLesson(){const l=state.lesson,pages=l.pages||[],qs=l.questions||[];
   else if(state.phase==="quiz")dots=qs.map((_,i)=>{const a=state.answers[i];return h("span",{class:"dot"+(a?(a.ok?" ok":" no"):i===state.qi?" on":"")});});
   out.push(h("div",{class:"topbar"},h("button",{class:"back",onclick:goHome},"⬅ Kembali"),h("div",{class:"dots","aria-hidden":"true"},dots)));
   if(state.phase==="learn"){const p=pages[state.step];
-    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),p.video?h("iframe",{class:"video",src:"https://www.youtube-nocookie.com/embed/"+encodeURIComponent(p.video)+"?rel=0&modestbranding=1&playsinline=1",title:"Video pelajaran",allow:"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",allowfullscreen:true}):h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
+    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),p.video?h("iframe",{class:"video",src:"https://www.youtube.com/embed/"+encodeURIComponent(p.video)+"?rel=0&modestbranding=1&playsinline=1",title:"Video pelajaran",allow:"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"}):h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
+      p.video?h("a",{class:"sm",href:"https://www.youtube.com/watch?v="+encodeURIComponent(p.video),target:"_blank",rel:"noopener"},"▶ Video tidak muncul? Tonton di YouTube"):null,
       p.text?h("div",{class:"txt"+(p.text.length>110?" long":"")},p.text):null,p.text?speakBtn(p.text):null,
       h("div",{class:"row",style:"justify-content:center"},
         state.step>0?h("button",{class:"big-btn alt",onclick:()=>{state.step--;render();}},"⬅"):null,
@@ -405,8 +408,8 @@ render();
   state.sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
   const timer=setTimeout(()=>{state.slow=true;render();},10000);
   try{const s=await state.sb.auth.getSession();state.mama=s.data.session?s.data.session.user:null;
-    await Promise.all([loadLessons(),loadSettings()]);state.loading=false;state.slow=false;}
-  catch(e){state.loading=false;state.slow=true;}
+    await Promise.all([loadLessons(),loadSettings()]);state.loading=false;state.slow=false;state.loadErr="";}
+  catch(e){state.loading=false;state.slow=true;state.loadErr=[e&&e.code,e&&e.message].filter(Boolean).join(" · ")||String(e);}
   clearTimeout(timer);render();
   document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"&&state.view==="home"){try{await Promise.all([loadLessons(),loadSettings()]);render();}catch(e){}}});
 })();

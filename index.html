@@ -73,6 +73,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .stage{background:var(--surface);border-radius:32px;padding:clamp(20px,5vw,40px);display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;box-shadow:var(--shadow)}
 .stage .em{font-size:clamp(80px,22vw,140px);line-height:1}
 .stage .txt{font-size:clamp(1.4rem,4.5vw,2rem);font-weight:800;max-width:30ch;white-space:pre-wrap;overflow-wrap:anywhere}
+.stage .txt.long{font-size:clamp(1.1rem,3.6vw,1.4rem);max-width:42ch;text-align:left;line-height:1.55}
+.video{width:100%;max-width:720px;aspect-ratio:16/9;border:0;border-radius:20px;background:#000}
 .stage .kicker{font-family:var(--display);font-weight:800;color:var(--muted);font-size:1.1rem;letter-spacing:.04em;text-transform:uppercase}
 .speak{font-weight:800;padding:10px 18px;border-radius:999px;background:var(--bg);border:2px solid var(--line)}
 .opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;width:100%}
@@ -243,8 +245,8 @@ function viewLesson(){const l=state.lesson,pages=l.pages||[],qs=l.questions||[];
   else if(state.phase==="quiz")dots=qs.map((_,i)=>{const a=state.answers[i];return h("span",{class:"dot"+(a?(a.ok?" ok":" no"):i===state.qi?" on":"")});});
   out.push(h("div",{class:"topbar"},h("button",{class:"back",onclick:goHome},"⬅ Kembali"),h("div",{class:"dots","aria-hidden":"true"},dots)));
   if(state.phase==="learn"){const p=pages[state.step];
-    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
-      h("div",{class:"txt"},p.text),speakBtn(p.text),
+    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),p.video?h("iframe",{class:"video",src:"https://www.youtube-nocookie.com/embed/"+encodeURIComponent(p.video)+"?rel=0&modestbranding=1&playsinline=1",title:"Video pelajaran",allow:"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",allowfullscreen:true}):h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
+      p.text?h("div",{class:"txt"+(p.text.length>110?" long":"")},p.text):null,p.text?speakBtn(p.text):null,
       h("div",{class:"row",style:"justify-content:center"},
         state.step>0?h("button",{class:"big-btn alt",onclick:()=>{state.step--;render();}},"⬅"):null,
         h("button",{class:"big-btn go",onclick:()=>{if(state.step<pages.length-1)state.step++;else state.phase="intro";render();}},state.step<pages.length-1?"Lanjut ➜":"Selesai ✓"))));}
@@ -353,7 +355,8 @@ function viewEditor(){const e=state.edit;const p=h("div",{class:"panel"});
   p.append(h("h3",null,"Materi"),h("p",{class:"hint"},"Satu kartu = satu kalimat pendek. Tambahkan emoji supaya mudah dipahami."));
   e.pages.forEach((pg,i)=>p.append(h("div",{class:"block"},h("h4",null,"Kartu "+(i+1),h("span",{class:"spacer"}),h("button",{class:"sm danger",onclick:()=>{e.pages.splice(i,1);render();}},"Hapus")),
     h("div",{class:"grid2"},h("label",{class:"f"},"Emoji",bind(pg,"emoji",h("input",{type:"text",id:"ed-pe-"+i,value:pg.emoji||""}))),
-      h("label",{class:"f"},"Kalimat",bind(pg,"text",h("textarea",{id:"ed-pt-"+i},pg.text||"")))))));
+      h("label",{class:"f"},"Kalimat",bind(pg,"text",h("textarea",{id:"ed-pt-"+i},pg.text||"")))),
+    h("label",{class:"f"},"Link video YouTube (boleh kosong)",bind(pg,"videoLink",h("input",{type:"text",id:"ed-pv-"+i,value:pg.videoLink||(pg.video?"https://youtu.be/"+pg.video:""),placeholder:"https://youtu.be/…"}))))));
   p.append(h("button",{class:"sm",onclick:()=>{e.pages.push({emoji:"",text:""});render();}},"+ Tambah kartu materi"));
   p.append(h("h3",null,"Kuis"),h("p",{class:"hint"},"Isi 2 sampai 4 pilihan. Pilih bulatan di sebelah jawaban yang benar."));
   e.questions.forEach((q,i)=>p.append(h("div",{class:"block"},h("h4",null,"Soal "+(i+1),h("span",{class:"spacer"}),h("button",{class:"sm danger",onclick:()=>{e.questions.splice(i,1);render();}},"Hapus")),
@@ -367,7 +370,9 @@ function viewEditor(){const e=state.edit;const p=h("div",{class:"panel"});
 
 async function submitEditor(){const e=state.edit;
   const title=(e.title||"").trim();if(!title){state.editErr="Judul belum diisi.";render();return;}
-  const pages=e.pages.filter(p=>(p.text||"").trim()).map(p=>({emoji:(p.emoji||"").trim(),text:p.text.trim()}));
+  const ytId=v=>{v=(v||"").trim();if(!v)return "";const m=v.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);return m?m[1]:(/^[A-Za-z0-9_-]{11}$/.test(v)?v:null);};
+  for(const [i,p] of e.pages.entries()){if(ytId(p.videoLink!==undefined?p.videoLink:p.video)===null){state.editErr="Kartu "+(i+1)+": link YouTube tidak dikenali.";render();return;}}
+  const pages=e.pages.map(p=>{const vid=ytId(p.videoLink!==undefined?p.videoLink:p.video);const o={emoji:(p.emoji||"").trim(),text:(p.text||"").trim()};if(vid)o.video=vid;return o;}).filter(p=>p.text||p.video);
   const questions=[];for(const [i,q] of e.questions.entries()){if(!(q.q||"").trim())continue;
     const opts=[];let ans=-1;q.options.forEach((o,j)=>{if((o||"").trim()){if(j===q.answer)ans=opts.length;opts.push(o.trim());}});
     if(opts.length<2){state.editErr="Soal "+(i+1)+" butuh minimal 2 pilihan.";render();return;}

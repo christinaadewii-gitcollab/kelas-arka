@@ -74,6 +74,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .stage .em{font-size:clamp(80px,22vw,140px);line-height:1}
 .stage .txt{font-size:clamp(1.4rem,4.5vw,2rem);font-weight:800;max-width:30ch;white-space:pre-wrap;overflow-wrap:anywhere}
 .stage .txt.long{font-size:clamp(1.1rem,3.6vw,1.4rem);max-width:42ch;text-align:left;line-height:1.55}
+.pic{width:min(100%,380px);height:auto;max-height:340px;border-radius:18px;object-fit:contain;background:#fff}
+.passage{width:100%;max-width:60ch;background:var(--bg);border:2px solid var(--line);border-radius:18px;padding:14px 16px;text-align:left;font-weight:700;font-size:1.05rem;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
 .video{width:100%;max-width:720px;aspect-ratio:16/9;border:0;border-radius:20px;background:#000}
 .stage .kicker{font-family:var(--display);font-weight:800;color:var(--muted);font-size:1.1rem;letter-spacing:.04em;text-transform:uppercase}
 .speak{font-weight:800;padding:10px 18px;border-radius:999px;background:var(--bg);border:2px solid var(--line)}
@@ -186,6 +188,12 @@ function beep(ok){try{actx=actx||new (window.AudioContext||window.webkitAudioCon
   const t=actx.currentTime+i*.12;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.25,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.25);
   o.connect(g).connect(actx.destination);o.start(t);o.stop(t+.3);});}catch(e){}}
 function say(text,lang){if(!state.tts||!text)return;lang=lang||(state.lesson&&state.lesson.lang)||"id";try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.replace(/\n/g,". "));u.lang=lang==="en"?"en-US":"id-ID";u.rate=.9;const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.replace("_","-").toLowerCase().startsWith(lang));if(v)u.voice=v;speechSynthesis.speak(u);}catch(e){}}
+function mediaNodes(o){const out=[];
+  if(o.video){out.push(h("iframe",{class:"video",src:"https://www.youtube.com/embed/"+encodeURIComponent(o.video)+"?rel=0&modestbranding=1&playsinline=1",title:"Video pelajaran",allow:"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"}),
+    h("a",{class:"sm",href:"https://www.youtube.com/watch?v="+encodeURIComponent(o.video),target:"_blank",rel:"noopener"},"▶ Video tidak muncul? Tonton di YouTube"));}
+  if(o.image)out.push(h("img",{class:"pic",src:o.image,alt:"Gambar soal",loading:"lazy"}));
+  if(o.passage)out.push(h("div",{class:"passage"},o.passage));
+  return out;}
 function speakBtn(text,lang){return state.tts?h("button",{class:"speak",onclick:()=>say(text,lang),"aria-label":"Dengarkan"},"🔊 Dengar"):null;}
 
 /* ---------- confetti ---------- */
@@ -239,7 +247,8 @@ function viewHome(){
   if(state.local)kids.push(h("p",{class:"status"},"Mode perangkat ini saja: nilai disimpan di perangkat ini dan tidak terkirim ke Mama."));
   return kids;}
 
-function startLesson(l){Object.assign(state,{view:"lesson",lesson:l,step:0,phase:(l.pages||[]).length?"learn":"intro",qi:0,picked:null,answers:[],saved:false});render();scrollTo(0,0);}
+function shuffled(l){const c=JSON.parse(JSON.stringify(l));(c.questions||[]).forEach(q=>{const idx=q.options.map((_,i)=>i);for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}const orig=q.options.slice();q.options=idx.map(i=>orig[i]);q.answer=idx.indexOf(q.answer);});return c;}
+function startLesson(l){l=shuffled(l);Object.assign(state,{view:"lesson",lesson:l,step:0,phase:(l.pages||[]).length?"learn":"intro",qi:0,picked:null,answers:[],saved:false});render();scrollTo(0,0);}
 
 function viewLesson(){const l=state.lesson,pages=l.pages||[],qs=l.questions||[];const out=[];
   let dots=[];
@@ -247,8 +256,7 @@ function viewLesson(){const l=state.lesson,pages=l.pages||[],qs=l.questions||[];
   else if(state.phase==="quiz")dots=qs.map((_,i)=>{const a=state.answers[i];return h("span",{class:"dot"+(a?(a.ok?" ok":" no"):i===state.qi?" on":"")});});
   out.push(h("div",{class:"topbar"},h("button",{class:"back",onclick:goHome},"⬅ Kembali"),h("div",{class:"dots","aria-hidden":"true"},dots)));
   if(state.phase==="learn"){const p=pages[state.step];
-    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),p.video?h("iframe",{class:"video",src:"https://www.youtube.com/embed/"+encodeURIComponent(p.video)+"?rel=0&modestbranding=1&playsinline=1",title:"Video pelajaran",allow:"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",allowfullscreen:true,referrerpolicy:"strict-origin-when-cross-origin"}):h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
-      p.video?h("a",{class:"sm",href:"https://www.youtube.com/watch?v="+encodeURIComponent(p.video),target:"_blank",rel:"noopener"},"▶ Video tidak muncul? Tonton di YouTube"):null,
+    out.push(h("div",{class:"stage"},h("div",{class:"kicker"},l.title),(p.video||p.image)?mediaNodes({video:p.video,image:p.image}):h("div",{class:"em pop","aria-hidden":"true"},p.emoji||l.emoji||"📘"),
       p.text?h("div",{class:"txt"+(p.text.length>110?" long":"")},p.text):null,p.text?speakBtn(p.text):null,
       h("div",{class:"row",style:"justify-content:center"},
         state.step>0?h("button",{class:"big-btn alt",onclick:()=>{state.step--;render();}},"⬅"):null,
@@ -259,7 +267,7 @@ function viewLesson(){const l=state.lesson,pages=l.pages||[],qs=l.questions||[];
       qs.length?h("button",{class:"big-btn go",onclick:()=>{state.phase="quiz";render();}},"Mulai ▶"):h("button",{class:"big-btn",onclick:goHome},"Kembali ke awal")));}
   else if(state.phase==="quiz"){const q=qs[state.qi];const picked=state.picked;const long=q.options.some(o=>String(o).length>14);
     const stage=h("div",{class:"stage"},h("div",{class:"kicker"},"Soal "+(state.qi+1)+" dari "+qs.length),
-      q.emoji?h("div",{class:"em","aria-hidden":"true"},q.emoji):null,h("div",{class:"txt"},q.q),speakBtn(q.q+(state.lesson.lang==="en"?". Choices: ":". Pilihannya: ")+q.options.join(", ")),
+      mediaNodes(q),(q.emoji&&!q.video&&!q.image)?h("div",{class:"em","aria-hidden":"true"},q.emoji):null,h("div",{class:"txt"},q.q),speakBtn(q.q+(state.lesson.lang==="en"?". Choices: ":". Pilihannya: ")+q.options.join(", ")),
       h("div",{class:"opts"+(long?" long":"")},q.options.map((o,i)=>{let c="opt";
         if(picked!=null){if(i===q.answer)c+=" right";else if(i===picked)c+=" wrong";else c+=" dim";}
         return h("button",{class:c,disabled:picked!=null,onclick:()=>pick(i)},o);})));
@@ -359,11 +367,15 @@ function viewEditor(){const e=state.edit;const p=h("div",{class:"panel"});
   e.pages.forEach((pg,i)=>p.append(h("div",{class:"block"},h("h4",null,"Kartu "+(i+1),h("span",{class:"spacer"}),h("button",{class:"sm danger",onclick:()=>{e.pages.splice(i,1);render();}},"Hapus")),
     h("div",{class:"grid2"},h("label",{class:"f"},"Emoji",bind(pg,"emoji",h("input",{type:"text",id:"ed-pe-"+i,value:pg.emoji||""}))),
       h("label",{class:"f"},"Kalimat",bind(pg,"text",h("textarea",{id:"ed-pt-"+i},pg.text||"")))),
+    h("label",{class:"f"},"Link gambar (boleh kosong)",bind(pg,"image",h("input",{type:"text",id:"ed-pi-"+i,value:pg.image||"",placeholder:"https://… .jpg"}))),
     h("label",{class:"f"},"Link video YouTube (boleh kosong)",bind(pg,"videoLink",h("input",{type:"text",id:"ed-pv-"+i,value:pg.videoLink||(pg.video?"https://youtu.be/"+pg.video:""),placeholder:"https://youtu.be/…"}))))));
   p.append(h("button",{class:"sm",onclick:()=>{e.pages.push({emoji:"",text:""});render();}},"+ Tambah kartu materi"));
   p.append(h("h3",null,"Kuis"),h("p",{class:"hint"},"Isi 2 sampai 4 pilihan. Pilih bulatan di sebelah jawaban yang benar."));
   e.questions.forEach((q,i)=>p.append(h("div",{class:"block"},h("h4",null,"Soal "+(i+1),h("span",{class:"spacer"}),h("button",{class:"sm danger",onclick:()=>{e.questions.splice(i,1);render();}},"Hapus")),
     h("label",{class:"f"},"Pertanyaan",bind(q,"q",h("input",{type:"text",id:"ed-q-"+i,value:q.q}))),
+    h("div",{class:"grid2"},h("label",{class:"f"},"Link gambar",bind(q,"image",h("input",{type:"text",id:"ed-qi-"+i,value:q.image||"",placeholder:"boleh kosong"}))),
+      h("label",{class:"f"},"Link video YouTube",bind(q,"videoLink",h("input",{type:"text",id:"ed-qv-"+i,value:q.videoLink!==undefined?q.videoLink:(q.video?"https://youtu.be/"+q.video:""),placeholder:"boleh kosong"})))),
+    h("label",{class:"f"},"Bacaan untuk soal ini (boleh kosong)",bind(q,"passage",h("textarea",{id:"ed-qp-"+i},q.passage||""))),
     h("div",{class:"optedit"},q.options.map((o,j)=>[h("input",{type:"radio",name:"ans-"+i,id:"ed-a-"+i+"-"+j,checked:q.answer===j,"aria-label":"Jawaban benar pilihan "+(j+1),onchange:()=>{q.answer=j;}}),
       bind(q.options,j,h("input",{type:"text",id:"ed-o-"+i+"-"+j,value:o,placeholder:"Pilihan "+(j+1)+(j>1?" (boleh kosong)":"")}))])))));
   p.append(h("button",{class:"sm",onclick:()=>{e.questions.push({q:"",options:["","","",""],answer:0});render();}},"+ Tambah soal"));
@@ -375,12 +387,15 @@ async function submitEditor(){const e=state.edit;
   const title=(e.title||"").trim();if(!title){state.editErr="Judul belum diisi.";render();return;}
   const ytId=v=>{v=(v||"").trim();if(!v)return "";const m=v.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);return m?m[1]:(/^[A-Za-z0-9_-]{11}$/.test(v)?v:null);};
   for(const [i,p] of e.pages.entries()){if(ytId(p.videoLink!==undefined?p.videoLink:p.video)===null){state.editErr="Kartu "+(i+1)+": link YouTube tidak dikenali.";render();return;}}
-  const pages=e.pages.map(p=>{const vid=ytId(p.videoLink!==undefined?p.videoLink:p.video);const o={emoji:(p.emoji||"").trim(),text:(p.text||"").trim()};if(vid)o.video=vid;return o;}).filter(p=>p.text||p.video);
+  for(const [i,q] of e.questions.entries()){if(ytId(q.videoLink!==undefined?q.videoLink:q.video)===null){state.editErr="Soal "+(i+1)+": link YouTube tidak dikenali.";render();return;}}
+  const pages=e.pages.map(p=>{const vid=ytId(p.videoLink!==undefined?p.videoLink:p.video);const o={emoji:(p.emoji||"").trim(),text:(p.text||"").trim()};if(vid)o.video=vid;if((p.image||"").trim())o.image=p.image.trim();return o;}).filter(p=>p.text||p.video||p.image);
   const questions=[];for(const [i,q] of e.questions.entries()){if(!(q.q||"").trim())continue;
     const opts=[];let ans=-1;q.options.forEach((o,j)=>{if((o||"").trim()){if(j===q.answer)ans=opts.length;opts.push(o.trim());}});
     if(opts.length<2){state.editErr="Soal "+(i+1)+" butuh minimal 2 pilihan.";render();return;}
     if(ans<0){state.editErr="Soal "+(i+1)+": jawaban benar yang dipilih masih kosong.";render();return;}
-    questions.push({q:q.q.trim(),options:opts,answer:ans});}
+    const nq={q:q.q.trim(),options:opts,answer:ans};const qv=ytId(q.videoLink!==undefined?q.videoLink:q.video);if(qv)nq.video=qv;
+    if((q.image||"").trim())nq.image=q.image.trim();if((q.passage||"").trim())nq.passage=q.passage.trim();if(q.emoji)nq.emoji=q.emoji;
+    questions.push(nq);}
   if(!pages.length&&!questions.length){state.editErr="Isi minimal satu kartu materi atau satu soal.";render();return;}
   const l={id:e.id,title,emoji:(e.emoji||"📘").trim(),color:e.color,order:Number(e.order)||99,lang:e.lang==="en"?"en":"id",pages,questions};
   try{await saveLesson(l);state.edit=null;state.ptab="pelajaran";toast("Pelajaran tersimpan");render();}

@@ -198,10 +198,12 @@ function stars(n){return "⭐".repeat(n)+"☆".repeat(3-n);}
 function fmtDate(iso){try{return new Date(iso).toLocaleString("id-ID",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});}catch(e){return iso;}}
 function bestFor(id){let b=-1;for(const r of state.results.concat(state.mine))if(r.lessonId===id&&r.score>b)b=r.score;return b;}
 function name(){return state.settings.childName||"Arka";}
-const SUBJECTS=[{id:"pancasila",name:"Pendidikan Pancasila",emoji:"🦅",color:"coral"},{id:"bindo",name:"Bhs Indonesia",emoji:"📖",color:"pink"},{id:"ipas",name:"IPAS",emoji:"🔬",color:"teal"},{id:"sbdp",name:"SBDP (Praktik)",emoji:"🎨",color:"grape"},{id:"mtk",name:"Matematika",emoji:"➗",color:"sun"},{id:"bing",name:"Bhs Inggris",emoji:"🌍",color:"ocean"},{id:"pai",name:"Pend Agama Islam",emoji:"🕌",color:"grass"}];
+const DEFAULT_SUBJECTS=[{id:"pancasila",name:"Pendidikan Pancasila",emoji:"🦅",color:"coral"},{id:"bindo",name:"Bhs Indonesia",emoji:"📖",color:"pink"},{id:"ipas",name:"IPAS",emoji:"🔬",color:"teal"},{id:"sbdp",name:"SBDP (Praktik)",emoji:"🎨",color:"grape"},{id:"mtk",name:"Matematika",emoji:"➗",color:"sun"},{id:"bing",name:"Bhs Inggris",emoji:"🌍",color:"ocean"},{id:"pai",name:"Pend Agama Islam",emoji:"🕌",color:"grass"}];
 const SUBJ_GUESS={perkalian:"mtk",pecahan:"mtk","wujud-benda":"ipas","daily-routine":"bing","animals-en":"bing","healthy-food-1":"bing","healthy-food-2":"bing","pecahan-pizza":"mtk"};
 function subjOf(l){return l.subject||SUBJ_GUESS[l.id]||(l.lang==="en"?"bing":"");}
-function subjById(id){return SUBJECTS.find(x=>x.id===id);}
+function subjects(){const x=state.settings.subjects;return Array.isArray(x)?x:DEFAULT_SUBJECTS;}
+function subjById(id){return subjects().find(x=>x.id===id);}
+const SUBJ_COLORS=["coral","pink","teal","grape","sun","ocean","grass"];
 const KID_KEY="kelas-arka-kid-v1";const DEFAULT_KID_USER="arka",DEFAULT_KID_PASS="arka123";
 async function kidHash(u,pw){const d=new TextEncoder().encode("kelas-arka|"+String(u).trim().toLowerCase()+"|"+pw);const b=await crypto.subtle.digest("SHA-256",d);return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");}
 async function expectedKid(){return state.settings.kidHash||await kidHash(state.settings.kidUser||DEFAULT_KID_USER,DEFAULT_KID_PASS);}
@@ -266,7 +268,7 @@ function fromRes(r){return {id:r.id,lessonId:r.lesson_id,lessonTitle:r.lesson_ti
 function chk(res){if(res.error)throw res.error;return res.data;}
 function saveMine(){try{localStorage.setItem(MINE_KEY,JSON.stringify(state.mine.slice(0,200)));}catch(e){}}
 async function loadLessons(){state.lessons=chk(await state.sb.from("lessons").select("*")).map(fromRow);sortLessons();}
-async function loadSettings(){const d=chk(await state.sb.from("settings").select("*").eq("id","home"));if(d[0])state.settings={childName:d[0].child_name||"Arka",message:d[0].message||"",kidUser:d[0].kid_username||"",kidHash:d[0].kid_pass_hash||""};}
+async function loadSettings(){const d=chk(await state.sb.from("settings").select("*").eq("id","home"));if(d[0])state.settings={childName:d[0].child_name||"Arka",message:d[0].message||"",kidUser:d[0].kid_username||"",kidHash:d[0].kid_pass_hash||"",subjects:Array.isArray(d[0].subjects)?d[0].subjects:null};}
 async function loadResults(){state.results=chk(await state.sb.from("results").select("*").order("created_at",{ascending:false}).limit(300)).map(fromRes);}
 async function saveResult(r){state.mine=[r,...state.mine];saveMine();
   if(state.sb){try{chk(await state.sb.from("results").insert({lesson_id:r.lessonId,lesson_title:r.lessonTitle,lesson_emoji:r.lessonEmoji,score:r.score,correct:r.correct,total:r.total,stars:r.stars,answers:r.answers}));return true;}catch(e){toast("Nilai belum terkirim. Cek internet, lalu coba lagi.");return false;}}
@@ -276,7 +278,7 @@ async function saveLesson(l){
   else{const i=state.lessons.findIndex(x=>x.id===l.id);if(i>=0)state.lessons[i]=l;else state.lessons.push(l);sortLessons();saveLocal();}}
 async function deleteLesson(id){if(state.sb){chk(await state.sb.from("lessons").delete().eq("id",id));await loadLessons();}
   else{state.lessons=state.lessons.filter(l=>l.id!==id);saveLocal();}}
-async function saveSettings(s){if(state.sb){chk(await state.sb.from("settings").upsert({id:"home",child_name:s.childName,message:s.message,kid_username:s.kidUser||null,kid_pass_hash:s.kidHash||null}));state.settings=s;}else{state.settings=s;saveLocal();}}
+async function saveSettings(s){if(state.sb){chk(await state.sb.from("settings").upsert(Object.assign({id:"home",child_name:s.childName,message:s.message,kid_username:s.kidUser||null,kid_pass_hash:s.kidHash||null},Array.isArray(s.subjects)?{subjects:s.subjects}:{})));state.settings=s;}else{state.settings=s;saveLocal();}}
 async function deleteResult(id){if(state.sb){chk(await state.sb.from("results").delete().eq("id",id));state.results=state.results.filter(r=>r.id!==id);}else{state.results=state.results.filter(r=>r.id!==id);saveLocal();}}
 function sortLessons(){state.lessons.sort((a,b)=>(a.order??99)-(b.order??99)||String(a.title).localeCompare(b.title));}
 
@@ -303,7 +305,7 @@ function viewHome(){
   if(state.settings.message)kids.push(h("div",{class:"note"},h("div",{class:"ic","aria-hidden":"true"},"💌"),
     h("div",{style:"min-width:0;flex:1"},h("b",null,"Pesan dari Mama"),h("p",null,state.settings.message)),speakBtn("Pesan dari Mama. "+state.settings.message,"id")));
   if(state.loadErr&&!state.lessons.length){kids.push(h("div",{class:"empty"},h("div",{class:"em"},"⚠️"),h("p",null,"Pelajaran belum bisa dimuat dari database."),h("p",{class:"hint"},"Keterangan untuk Mama: "+state.loadErr),h("button",{class:"sm primary",onclick:()=>location.reload()},"Coba lagi")));}
-  kids.push(h("div",{class:"cards subjects"},SUBJECTS.map(sj=>{const n=state.lessons.filter(l=>subjOf(l)===sj.id).length;
+  kids.push(h("div",{class:"cards subjects"},subjects().map(sj=>{const n=state.lessons.filter(l=>subjOf(l)===sj.id).length;
     return h("button",{class:"lcard scard c-"+sj.color,onclick:()=>{state.subject=sj.id;state.view="subject";render();scrollTo(0,0);}},
       h("span",{class:"em","aria-hidden":"true"},sj.emoji),h("h3",null,sj.name),h("span",{class:"meta"},state.loading&&!state.lessons.length?"…":n?n+" pelajaran":"Belum ada pelajaran"));})));
   const other=state.lessons.filter(l=>!subjById(subjOf(l)));
@@ -397,7 +399,7 @@ function viewGate(){const g=state.gate;const back=h("div",{class:"topbar"},h("bu
 function viewParent(){const out=[];
   out.push(h("div",{class:"row parent"},h("h1",null,"Halaman Mama"),h("span",{class:"spacer"}),h("button",{class:"sm",onclick:leaveParent},"🔒 Keluar dari Halaman Mama")));
   const tabs=[["nilai","📊 Nilai "+name()],["pelajaran","📚 Pelajaran"],["pengaturan","💌 Pesan & nama"]];
-  out.push(h("div",{class:"tabs",role:"tablist"},tabs.map(([k,t])=>h("button",{class:"tab",role:"tab","aria-selected":String(state.ptab===k&&!state.edit),onclick:()=>{state.ptab=k;state.edit=null;state.psubj=null;state.confirmDel=null;render();}},t))));
+  out.push(h("div",{class:"tabs",role:"tablist"},tabs.map(([k,t])=>h("button",{class:"tab",role:"tab","aria-selected":String(state.ptab===k&&!state.edit),onclick:()=>{state.ptab=k;state.edit=null;state.psubj=null;state.confirmSubj=null;state.newSubj=null;state.confirmDel=null;render();}},t))));
   if(state.edit)out.push(viewEditor());
   else if(state.ptab==="nilai")out.push(viewResults());
   else if(state.ptab==="pelajaran")out.push(viewLessonList());
@@ -423,12 +425,35 @@ function lessonRow(l){return h("div",{class:"lrow"},h("span",{class:"em","aria-h
     h("span",{class:"t"},l.title,h("small",null,(l.pages||[]).length+" halaman materi · "+(l.questions||[]).length+" soal · "+(l.lang==="en"?"English":"Indonesia")+" · urutan "+(l.order??"-"))),
     state.confirmDel===l.id?[h("span",{class:"hint"},"Hapus?"),h("button",{class:"sm danger",onclick:async()=>{try{await deleteLesson(l.id);toast("Pelajaran dihapus");}catch(e){toast("Gagal menghapus");}state.confirmDel=null;render();}},"Ya, hapus"),h("button",{class:"sm",onclick:()=>{state.confirmDel=null;render();}},"Batal")]
     :[h("button",{class:"sm",onclick:()=>openEditor(l)},"Ubah"),h("button",{class:"sm danger",onclick:()=>{state.confirmDel=l.id;render();}},"Hapus")]);}
+async function saveSubjects(list){await saveSettings({...state.settings,subjects:list});}
+async function deleteSubject(id){const ls=state.lessons.filter(l=>subjOf(l)===id);
+  try{for(const l of ls)await deleteLesson(l.id);await saveSubjects(subjects().filter(x=>x.id!==id));toast("Mata pelajaran dihapus");}
+  catch(e){toast("Belum bisa menghapus. Sudahkah Mama menjalankan update-mapel-hapus.sql?");}
+  state.confirmSubj=null;render();}
+async function addSubject(){const ns=state.newSubj;const nm=(ns.name||"").trim();
+  if(!nm){ns.err="Nama mata pelajaran belum diisi.";render();return;}
+  if(subjects().some(x=>x.name.toLowerCase()===nm.toLowerCase())){ns.err="Mata pelajaran ini sudah ada.";render();return;}
+  try{await saveSubjects(subjects().concat([{id:"s"+Date.now().toString(36),name:nm,emoji:(ns.emoji||"📘").trim(),color:ns.color||"ocean"}]));state.newSubj=null;toast("Mata pelajaran ditambahkan");}
+  catch(e){ns.err="Belum bisa menyimpan. Sudahkah Mama menjalankan update-mapel-hapus.sql di Supabase?";}
+  render();}
 function viewLessonList(){const p=h("div",{class:"panel"});
   if(!state.psubj){
     p.append(h("p",{class:"hint"},"Pilih mata pelajaran untuk melihat, menambah, mengubah, atau menghapus sub bab pelajarannya."));
-    for(const sj of SUBJECTS){const n=state.lessons.filter(l=>subjOf(l)===sj.id).length;
-      p.append(h("button",{class:"lrow",style:"text-align:left;width:100%;cursor:pointer",onclick:()=>{state.psubj=sj.id;state.confirmDel=null;render();scrollTo(0,0);}},
-        h("span",{class:"em","aria-hidden":"true"},sj.emoji),h("span",{class:"t"},sj.name,h("small",null,n?n+" sub bab pelajaran":"Belum ada sub bab")),h("span",{class:"sm"},"Buka ›")));}
+    for(const sj of subjects()){const ls=state.lessons.filter(l=>subjOf(l)===sj.id);const n=ls.length;
+      if(state.confirmSubj===sj.id){p.append(h("div",{class:"lrow",style:"border-color:var(--bad)"},h("span",{class:"em","aria-hidden":"true"},sj.emoji),
+        h("span",{class:"t"},"Hapus "+sj.name+"?",h("small",null,(n?n+" sub bab di dalamnya ikut terhapus. ":"Mapel ini masih kosong. ")+"Nilai "+name()+" yang sudah ada tetap tersimpan di tab Nilai.")),
+        h("button",{class:"sm danger",onclick:()=>deleteSubject(sj.id)},"Ya, hapus"),h("button",{class:"sm",onclick:()=>{state.confirmSubj=null;render();}},"Batal")));continue;}
+      p.append(h("div",{class:"lrow"},h("span",{class:"em","aria-hidden":"true"},sj.emoji),h("span",{class:"t"},sj.name,h("small",null,n?n+" sub bab pelajaran":"Belum ada sub bab")),
+        h("button",{class:"sm",onclick:()=>{state.psubj=sj.id;state.confirmDel=null;state.confirmSubj=null;render();scrollTo(0,0);}},"Buka ›"),
+        h("button",{class:"sm danger","aria-label":"Hapus mata pelajaran "+sj.name,onclick:()=>{state.confirmSubj=sj.id;render();}},"🗑 Hapus")));}
+    if(state.newSubj){const ns=state.newSubj;
+      const nm=h("input",{type:"text",id:"ns-name",value:ns.name,placeholder:"mis. PJOK"});nm.addEventListener("input",()=>ns.name=nm.value);
+      const em=h("input",{type:"text",id:"ns-emoji",value:ns.emoji,maxlength:"8"});em.addEventListener("input",()=>ns.emoji=em.value);
+      const co=h("select",{id:"ns-color"},SUBJ_COLORS.map(c=>h("option",{value:c,selected:ns.color===c},COLOR_NAMES[c]||"Merah muda")));co.addEventListener("change",()=>ns.color=co.value);
+      p.append(h("div",{class:"block"},h("h4",null,"Mata pelajaran baru"),h("div",{class:"grid3"},h("label",{class:"f"},"Emoji",em),h("label",{class:"f"},"Nama",nm),h("label",{class:"f"},"Warna",co)),
+        ns.err?h("p",{class:"err"},ns.err):null,
+        h("div",{class:"row"},h("button",{class:"sm primary",onclick:addSubject},"Simpan mata pelajaran"),h("button",{class:"sm",onclick:()=>{state.newSubj=null;render();}},"Batal"))));}
+    else p.append(h("button",{class:"sm primary",style:"align-self:flex-start",onclick:()=>{state.newSubj={name:"",emoji:"📘",color:SUBJ_COLORS[subjects().length%SUBJ_COLORS.length],err:""};render();}},"+ Tambah mata pelajaran"));
     const other=state.lessons.filter(l=>!subjById(subjOf(l)));
     if(other.length){p.append(h("h3",null,"⚠️ Belum ada mata pelajaran"),h("p",{class:"hint"},"Tekan Ubah lalu pilih mata pelajarannya supaya tampil untuk "+name()+"."));other.forEach(l=>p.append(lessonRow(l)));}
     return p;}
@@ -456,7 +481,7 @@ function viewEditor(){const e=state.edit;const p=h("div",{class:"panel"});
     h("label",{class:"f"},"Gambar (emoji)",bind(e,"emoji",h("input",{type:"text",id:"ed-emoji",value:e.emoji,maxlength:"8"}))),
     h("label",{class:"f"},"Judul",bind(e,"title",h("input",{type:"text",id:"ed-title",value:e.title,placeholder:"mis. Mengenal Huruf"}))),
     h("label",{class:"f"},"Warna",bind(e,"color",h("select",{id:"ed-color"},COLORS.map(c=>h("option",{value:c,selected:e.color===c},COLOR_NAMES[c])))))));
-  if(!e.lang)e.lang="id";p.append(h("label",{class:"f",style:"max-width:320px"},"Mata pelajaran",bind(e,"subject",h("select",{id:"ed-subj"},h("option",{value:"",selected:!e.subject},"— pilih —"),SUBJECTS.map(sj=>h("option",{value:sj.id,selected:e.subject===sj.id},sj.name))))));p.append(h("div",{class:"row"},h("label",{class:"f",style:"max-width:160px"},"Urutan",bind(e,"order",h("input",{type:"number",id:"ed-order",value:e.order,min:"1"}),true)),h("label",{class:"f",style:"max-width:220px"},"Bahasa suara (🔊)",bind(e,"lang",h("select",{id:"ed-lang"},h("option",{value:"id",selected:e.lang!=="en"},"Indonesia"),h("option",{value:"en",selected:e.lang==="en"},"English"))))));
+  if(!e.lang)e.lang="id";p.append(h("label",{class:"f",style:"max-width:320px"},"Mata pelajaran",bind(e,"subject",h("select",{id:"ed-subj"},h("option",{value:"",selected:!e.subject},"— pilih —"),subjects().map(sj=>h("option",{value:sj.id,selected:e.subject===sj.id},sj.name))))));p.append(h("div",{class:"row"},h("label",{class:"f",style:"max-width:160px"},"Urutan",bind(e,"order",h("input",{type:"number",id:"ed-order",value:e.order,min:"1"}),true)),h("label",{class:"f",style:"max-width:220px"},"Bahasa suara (🔊)",bind(e,"lang",h("select",{id:"ed-lang"},h("option",{value:"id",selected:e.lang!=="en"},"Indonesia"),h("option",{value:"en",selected:e.lang==="en"},"English"))))));
   p.append(h("h3",null,"Materi"),h("p",{class:"hint"},"Satu kartu = satu kalimat pendek. Tambahkan emoji supaya mudah dipahami."));
   e.pages.forEach((pg,i)=>p.append(h("div",{class:"block"},h("h4",null,"Kartu "+(i+1),h("span",{class:"spacer"}),h("button",{class:"sm danger",onclick:()=>{e.pages.splice(i,1);render();}},"Hapus")),
     h("div",{class:"grid2"},h("label",{class:"f"},"Emoji",bind(pg,"emoji",h("input",{type:"text",id:"ed-pe-"+i,value:pg.emoji||""}))),
@@ -511,7 +536,7 @@ function viewSettings(){const s={...state.settings};const p=h("div",{class:"pane
       const userChanged=user!==(s.kidUser||DEFAULT_KID_USER);
       if(userChanged&&!pw){err.textContent="Kalau username diganti, isi juga kata sandi barunya.";err.hidden=false;return;}
       const hash=pw?await kidHash(user,pw):s.kidHash||"";
-      try{await saveSettings({childName:n.value.trim()||"Arka",message:m.value.trim(),kidUser:user,kidHash:hash});toast(pw?"Tersimpan. Login "+name()+": "+user+" / "+pw:"Tersimpan");}
+      try{await saveSettings({...state.settings,childName:n.value.trim()||"Arka",message:m.value.trim(),kidUser:user,kidHash:hash});toast(pw?"Tersimpan. Login "+name()+": "+user+" / "+pw:"Tersimpan");}
       catch(e){err.textContent="Belum bisa menyimpan. Sudahkah Mama menjalankan update-mapel-login.sql di Supabase?";err.hidden=false;return;}
       await checkKidLogin();render();}},"Simpan"));
   return p;}

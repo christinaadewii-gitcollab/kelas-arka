@@ -12,6 +12,7 @@ create table if not exists settings (id text primary key, child_name text, messa
 alter table lessons add column if not exists subject text;
 alter table settings add column if not exists kid_username text;
 alter table settings add column if not exists kid_pass_hash text;
+alter table settings add column if not exists subjects jsonb;
 
 
 -- Izin supaya website boleh membaca/mengirim data (sering belum aktif di project Supabase baru)

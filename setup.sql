@@ -9,6 +9,10 @@ create table if not exists results (
   lesson_id text, lesson_title text, lesson_emoji text,
   score int check (score between 0 and 100), correct int, total int, stars int, answers jsonb);
 create table if not exists settings (id text primary key, child_name text, message text);
+alter table lessons add column if not exists subject text;
+alter table settings add column if not exists kid_username text;
+alter table settings add column if not exists kid_pass_hash text;
+
 
 -- Izin supaya website boleh membaca/mengirim data (sering belum aktif di project Supabase baru)
 grant usage on schema public to anon, authenticated;
@@ -48,7 +52,11 @@ insert into lessons (id,title,emoji,color,sort_order,lang,pages,questions) value
 on conflict (id) do update set title=excluded.title, emoji=excluded.emoji, color=excluded.color,
   sort_order=excluded.sort_order, lang=excluded.lang, pages=excluded.pages, questions=excluded.questions;
 
+update lessons set subject = 'mtk'  where id in ('perkalian','pecahan') and subject is null;
+update lessons set subject = 'ipas' where id = 'wujud-benda' and subject is null;
+update lessons set subject = 'bing' where id in ('daily-routine','animals-en','healthy-food-1','healthy-food-2') and subject is null;
+
 notify pgrst, 'reload schema';
 
 -- Cek hasil: harus muncul 7 pelajaran
-select id, title from lessons order by sort_order;
+select id, title, subject from lessons order by sort_order;

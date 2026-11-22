@@ -339,7 +339,8 @@ async function nextQ(){const qs=state.lesson.questions;state.picked=null;
 function goHome(){state.view=!state.kidIn?"login":state.subject?"subject":"home";state.lesson=null;render();scrollTo(0,0);}
 
 /* ---------- gate ---------- */
-function openGate(){if(state.sb&&state.mama){openParent();return;}const a=6+Math.floor(Math.random()*7),b=5+Math.floor(Math.random()*8);state.gate={a,b,err:"",busy:false};state.view="gate";render();}
+async function leaveParent(){if(state.sb&&state.mama){try{await state.sb.auth.signOut();}catch(e){}}state.mama=null;state.results=[];state.edit=null;goHome();}
+function openGate(){const a=6+Math.floor(Math.random()*7),b=5+Math.floor(Math.random()*8);state.gate={a,b,err:"",busy:false};state.view="gate";render();}
 async function openParent(){state.view="parent";render();if(state.sb){try{await loadResults();}catch(e){toast("Nilai belum bisa dimuat");}render();}}
 function viewGate(){const g=state.gate;const back=h("div",{class:"topbar"},h("button",{class:"back",onclick:goHome},"⬅ Kembali"));
   if(state.sb){const em=h("input",{type:"text",id:"login-email",inputmode:"email",autocomplete:"username","aria-label":"Email"});
@@ -360,7 +361,7 @@ function viewGate(){const g=state.gate;const back=h("div",{class:"topbar"},h("bu
 
 /* ---------- views: parent ---------- */
 function viewParent(){const out=[];
-  out.push(h("div",{class:"row parent"},h("h1",null,"Halaman Mama"),h("span",{class:"spacer"}),h("button",{class:"sm",onclick:goHome},"Kembali ke tampilan "+name()),state.sb?h("button",{class:"sm",onclick:async()=>{await state.sb.auth.signOut();state.mama=null;state.results=[];goHome();}},"Keluar"):null));
+  out.push(h("div",{class:"row parent"},h("h1",null,"Halaman Mama"),h("span",{class:"spacer"}),h("button",{class:"sm",onclick:leaveParent},"🔒 Keluar dari Halaman Mama")));
   const tabs=[["nilai","📊 Nilai "+name()],["pelajaran","📚 Pelajaran"],["pengaturan","💌 Pesan & nama"]];
   out.push(h("div",{class:"tabs",role:"tablist"},tabs.map(([k,t])=>h("button",{class:"tab",role:"tab","aria-selected":String(state.ptab===k&&!state.edit),onclick:()=>{state.ptab=k;state.edit=null;state.confirmDel=null;render();}},t))));
   if(state.edit)out.push(viewEditor());
@@ -476,12 +477,14 @@ if(kidToken()){state.kidIn=true;state.view="home";}
 render();
 (async function boot(){
   if(!(CFG.supabaseUrl&&CFG.supabaseAnonKey&&window.supabase)){useLocal();return;}
-  state.sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
+  try{Object.keys(localStorage).filter(k=>/^sb-.*-auth-token/.test(k)).forEach(k=>localStorage.removeItem(k));}catch(e){}
+  state.sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:false}});
   const timer=setTimeout(()=>{state.slow=true;render();},10000);
   try{const s=await state.sb.auth.getSession();state.mama=s.data.session?s.data.session.user:null;
     await Promise.all([loadLessons(),loadSettings()]);state.loading=false;state.slow=false;state.loadErr="";}
   catch(e){state.loading=false;state.slow=true;state.loadErr=[e&&e.code,e&&e.message].filter(Boolean).join(" · ")||String(e);}
   clearTimeout(timer);await checkKidLogin();render();
+  let hiddenAt=0;document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")hiddenAt=Date.now();else if(state.mama&&hiddenAt&&Date.now()-hiddenAt>5*60*1000){leaveParent();toast("Halaman Mama dikunci lagi");}});
   document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"&&(state.view==="home"||state.view==="subject")){try{await Promise.all([loadLessons(),loadSettings()]);await checkKidLogin();render();}catch(e){}}});
 })();
 })();
